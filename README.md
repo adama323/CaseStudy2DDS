@@ -1,2 +1,2 @@
-# DDS6306_Case_Study_2
+# CaseStudy2DDS
 Case Study 2
