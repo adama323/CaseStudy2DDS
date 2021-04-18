@@ -1,0 +1,667 @@
+---
+title: "DDS6306_Case_Study_2"
+author: "Adam Alidra"
+date: "4/18/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+##Introduction
+
+####Talent Management Data Science Study on Employee Attrition
+
+####In this study, our team analyzes a wide range of atttributes respective to employee attrition, from existing employee data sets, to glean insights about drivers contributing to attrition amongst employees. As part of the study, we identify the top factors leading to attrition along with other interesting observations and correlations between the provided variables.
+
+####Using the insights generated from the explorartory data analysis, we then applied machine learning models to first, classify attrition against other variables in the data set, and then predict incomes based off those same variables.
+
+##Load the required libraries, read in the data, and tidy/transform CaseStudy 2 datasets (-data, No Attrition, and No Salary)
+
+```{r}
+library(naniar)
+library(stringr)
+library(class)
+library(caret)
+library(e1071)
+library(plyr)
+library(dplyr)
+library(ggthemes)
+library(tidyverse)
+library(janitor)
+library(magrittr)
+library(corrplot)
+library(gridExtra)
+library(devtools)
+library(rpart)
+library(caTools)
+library(randomForest)
+library(lattice)
+library(rmarkdown)
+
+#Read in CaseStudy2 csv
+
+employeeTrends = read.csv('/Users/adalidra/Desktop/Data Science Program/DS6306/MSDS_6306_Doing-Data-Science/Unit 14 and 15 Case Study 2/CaseStudy2-data.csv',header = TRUE)
+
+#Viewing and Understanding CaseStudy2 at a high level
+str(employeeTrends)
+dim(employeeTrends)
+summary(employeeTrends)
+
+#Tidying/Transforming CaseStudy2_data
+
+#Removed columns 'Over18', 'EmployeeCount', & 'StandardHours' given no variation across sample population (and other provided data sets) therefore being immaterial to analysis
+
+#Also removed 'ID' and 'EmployeeNumber' from primary data set since they have no bearing in exploratory analysis
+
+employeeTrends1 <- employeeTrends %>% 
+  mutate(Business_Travel = ifelse(BusinessTravel == 'Non-Travel','No','Yes')) %>% 
+  mutate(Travel_Frequency = ifelse(Business_Travel == 'Yes',BusinessTravel,'None')) %>% 
+  mutate(Travel_Frequency = gsub('Travel_','',Travel_Frequency)) %>% 
+  select(-BusinessTravel) %>% 
+    select( -Over18) %>% 
+    select( -EmployeeCount) %>% 
+    select( -StandardHours) %>%
+    select(-ID) %>%
+    select(-EmployeeNumber) %>%
+  mutate(Travel_Frequency = factor(Travel_Frequency)) %>% 
+  relocate(Travel_Frequency, .after = TrainingTimesLastYear) %>%
+    select(-Business_Travel)
+
+#Transforming categorical variables in data set from from integers, including 'Education', 'EnvironmentSatisfaction', 'JobInvolvement', 'JobLevel', 'JobSatisfaction', 'PerformanceRating', 'RelationshipSatisfaction', 'StockOptionLevel' 'TrainingTimesLastYear', and 'WorkLifeBalance'
+
+employeeTrends1$Education <- as.factor(employeeTrends$Education)
+employeeTrends1$EnvironmentSatisfaction <- as.factor(employeeTrends$EnvironmentSatisfaction)
+employeeTrends1$JobInvolvement <- as.factor(employeeTrends$JobSatisfaction)
+employeeTrends1$JobLevel <- as.factor(employeeTrends1$JobLevel)
+employeeTrends1$JobSatisfaction <- as.factor(employeeTrends1$JobSatisfaction)
+employeeTrends1$PerformanceRating <- as.factor(employeeTrends1$PerformanceRating)
+employeeTrends1$RelationshipSatisfaction <- as.factor(employeeTrends1$RelationshipSatisfaction)
+employeeTrends1$StockOptionLevel <- as.factor(employeeTrends1$StockOptionLevel)
+employeeTrends1$TrainingTimesLastYear<- as.factor(employeeTrends1$TrainingTimesLastYear)
+employeeTrends1$WorkLifeBalance <- as.factor(employeeTrends1$WorkLifeBalance)
+
+#Tidying/Transforming CaseStudy2CompSet_No_Attrition
+
+#Removed columns 'Over18', 'EmployeeCount', & 'StandardHours' given no variation across sample population (and other provided datasets) therefore being immaterial to analysis
+
+employeeTrendsClassificationSet= read.csv('/Users/adalidra/Desktop/Data Science Program/DS6306/MSDS_6306_Doing-Data-Science/Unit 14 and 15 Case Study 2/CaseStudy2CompSet No Attrition.csv.',header = TRUE)
+
+employeeTrendsClassificationSet1 <- employeeTrendsClassificationSet %>% 
+  mutate(Business_Travel = ifelse(BusinessTravel == "Non-Travel","No","Yes")) %>% 
+  mutate(Travel_Frequency = ifelse(Business_Travel == 'Yes',BusinessTravel,'None')) %>% 
+  mutate(Travel_Frequency = gsub("Travel_",'',Travel_Frequency)) %>% 
+  select(-BusinessTravel) %>% 
+    select( -Over18) %>% 
+    select( -EmployeeCount) %>% 
+    select( -StandardHours) %>% 
+    select(-EmployeeNumber) %>%
+  mutate(Travel_Frequency = factor(Travel_Frequency)) %>%
+  relocate(Travel_Frequency, .after = TrainingTimesLastYear) %>%
+    select(-Business_Travel)
+
+#Transforming categorical variables in data set from from integers, including 'Education', 'EnvironmentSatisfaction', 'JobInvolvement', 'JobLevel', 'JobSatisfaction', 'PerformanceRating', 'RelationshipSatisfaction', 'StockOptionLevel' 'TrainingTimesLastYear', and 'WorkLifeBalance'
+
+employeeTrendsClassificationSet1$Education <- as.factor(employeeTrendsClassificationSet$Education)
+employeeTrendsClassificationSet1$EnvironmentSatisfaction <- as.factor(employeeTrendsClassificationSet$EnvironmentSatisfaction)
+employeeTrendsClassificationSet1$JobInvolvement <- as.factor(employeeTrendsClassificationSet$JobSatisfaction)
+employeeTrendsClassificationSet1$JobLevel <- as.factor(employeeTrendsClassificationSet$JobLevel)
+employeeTrendsClassificationSet1$JobSatisfaction <- as.factor(employeeTrendsClassificationSet$JobSatisfaction)
+employeeTrendsClassificationSet1$PerformanceRating <- as.factor(employeeTrendsClassificationSet$PerformanceRating)
+employeeTrendsClassificationSet1$RelationshipSatisfaction <- as.factor(employeeTrendsClassificationSet$RelationshipSatisfaction)
+employeeTrendsClassificationSet1$StockOptionLevel <- as.factor(employeeTrendsClassificationSet$StockOptionLevel)
+employeeTrendsClassificationSet1$TrainingTimesLastYear<- as.factor(employeeTrendsClassificationSet$TrainingTimesLastYear)
+employeeTrendsClassificationSet1$WorkLifeBalance <- as.factor(employeeTrendsClassificationSet$WorkLifeBalance)
+
+#Tidying/Transforming CaseStudy2CompSet_No_Salary
+
+#Removed columns 'Over18', 'EmployeeCount', & 'StandardHours' given no variation across sample population (and other provided datasets) therefore being immaterial to analysis
+
+employeeTrendsRMSE= read.csv('/Users/adalidra/Desktop/Data Science Program/DS6306/MSDS_6306_Doing-Data-Science/Unit 14 and 15 Case Study 2/CaseStudy2CompSet No Salary.csv.',header = TRUE)
+
+employeeTrendsRMSE <- employeeTrendsRMSE %>% 
+  mutate(Business_Travel = ifelse(BusinessTravel == "Non-Travel","No","Yes")) %>% 
+  mutate(Travel_Frequency = ifelse(Business_Travel == 'Yes',BusinessTravel,'None')) %>% 
+  mutate(Travel_Frequency = gsub('Travel_','',Travel_Frequency)) %>% 
+  select(-BusinessTravel) %>% 
+    select( -Over18) %>% 
+    select( -EmployeeCount) %>% 
+    select( -StandardHours) %>% 
+    select(-EmployeeNumber) %>%
+  mutate(Travel_Frequency = factor(Travel_Frequency)) %>% 
+  relocate(Travel_Frequency, .after = TrainingTimesLastYear) %>%
+    select(-Business_Travel)
+
+#Transforming categorical variables in data set from from integers, including 'Education', 'EnvironmentSatisfaction', 'JobInvolvement', 'JobLevel', 'JobSatisfaction', 'PerformanceRating', 'RelationshipSatisfaction', 'StockOptionLevel' 'TrainingTimesLastYear', and 'WorkLifeBalance'
+
+employeeTrendsRMSE$Education <- as.factor(employeeTrendsRMSE$Education)
+employeeTrendsRMSE$EnvironmentSatisfaction <- as.factor(employeeTrendsRMSE$EnvironmentSatisfaction)
+employeeTrendsRMSE$JobInvolvement <- as.factor(employeeTrendsRMSE$JobSatisfaction)
+employeeTrendsRMSE$JobLevel <- as.factor(employeeTrendsRMSE$JobLevel)
+employeeTrendsRMSE$JobSatisfaction <- as.factor(employeeTrendsRMSE$JobSatisfaction)
+employeeTrendsRMSE$PerformanceRating <- as.factor(employeeTrendsRMSE$PerformanceRating)
+employeeTrendsRMSE$RelationshipSatisfaction <- as.factor(employeeTrendsRMSE$RelationshipSatisfaction)
+employeeTrendsRMSE$StockOptionLevel <- as.factor(employeeTrendsRMSE$StockOptionLevel)
+employeeTrendsRMSE$TrainingTimesLastYear<- as.factor(employeeTrendsRMSE$TrainingTimesLastYear)
+employeeTrendsRMSE$WorkLifeBalance <- as.factor(employeeTrendsRMSE$WorkLifeBalance)
+
+```
+
+##Explore and Analyze tidied CaseStudy2 data set, plot, and make inferences about initial findings
+
+#In this first subset of examples, we're focusing on attrition respective to income, job level, and job roles
+
+```{r}
+
+#Visualizing attrition comparing individual and collective relationships between attrition and monthly income versus attrition and monthly rate
+
+p0 <- employeeTrends1 %>%
+  mutate(Attrition=ifelse(Attrition=="Yes"," Yes (140)","No (730)"))%>%
+ggplot()+
+  geom_boxplot(aes(x=Attrition, y=MonthlyIncome, fill=Attrition), alpha=0.7)+
+  ggtitle("Attrition by Monthly Income")+
+  scale_y_continuous(name='Monthly Income')+
+  theme(plot.title=element_text(size=20, color="Black"))+
+  scale_fill_manual(values=c("Red","Blue"))
+p0
+
+p1 <- ggplot(data=employeeTrends1)+
+  geom_boxplot(aes(x=Attrition, y=MonthlyRate), col=c("Blue", "Red"), alpha=0.7)+
+  ggtitle("Attrition by Monthly Rate")+
+  scale_y_continuous(name="Monthly Rate")+
+  theme(plot.title=element_text(size=20, color="Black"))
+p1
+
+grid.arrange(p0,p1)
+
+##Plotting an analyzing relationship between attrition and job status, including job role, job level, time in role, and age (the latter variable, hypothesizing we may be able to draw a connection to time in role)
+
+#Monthly income to age ratio based on job role
+
+ggplot(employeeTrends)+
+  geom_point(aes(x=Age, y=MonthlyIncome, color=JobRole))+
+  ggtitle('Monthly Income vs. Age vs. Job Role')+
+  scale_y_continuous(name="Monthly Income")+
+  scale_color_discrete(name="Job Role")+
+  theme(plot.title=element_text(size=20, color="Black"))
+
+#Attrition based on years in job role and income
+
+ggplot(employeeTrends)+
+  geom_point(aes(x=Age, y=YearsInCurrentRole, color=Attrition), alpha=0.7)+ 
+  ggtitle("Monthly Income vs Age vs Years in Current Role")+
+  scale_y_continuous(name="Years in Current Role")+
+  theme(plot.title=element_text(size=20, color="Black")) +
+  scale_color_manual(values=c("Blue","Red"))
+
+#Attrition based on job role
+
+employeeRole <- employeeTrends1%>%
+  group_by(JobRole)%>%
+  count(Attrition)%>%
+  mutate(AttritionRate=scales::percent(n/sum(n)))
+employeeRole
+
+ggplot(data=employeeTrends1, aes(x=JobRole, fill=Attrition))+
+  geom_bar(alpha=0.7)+
+  geom_text(data=employeeRole, aes(y=n,label=AttritionRate), position=position_stack(vjust=0.5), size=3)+
+  ggtitle("Attrition by Job Role")+
+  scale_x_discrete(name="Job Role")+
+  scale_y_continuous(name="# of Employees")+
+  theme(plot.title=element_text(size=20, color="Black"))+
+  scale_fill_manual(values=c("Blue", "Red"))
+
+#Attrition based on job role and monthly income
+
+JobRole1 <- employeeTrends1 %>%  filter(Attrition=="Yes")%>% group_by(JobRole) %>% summarize(MI=mean(MonthlyIncome)) %>%arrange((MI))
+
+employeeTrends1 %>%
+  ungroup()%>%
+  mutate(JobRole=factor(JobRole, levels=JobRole1$JobRole, ordered=TRUE)) %>%
+ggplot(aes(x=JobRole, y=MonthlyIncome, color=Attrition))+
+  geom_point(alpha=0.7) +
+  ggtitle("Attrition based on Monthly Income and Job Role") +
+  scale_x_discrete(name="Job Role") +
+  scale_y_continuous((name="Monthly Income")) +
+  theme(plot.title=element_text(size=20, color="Black"))+
+  scale_color_manual(values=c("Blue", "Red"))
+  
+#Attrition based on job level
+
+level <- employeeTrends1%>%
+  group_by(JobLevel)%>%
+  count(Attrition)%>%
+  mutate(AttritionRate=scales::percent(n/sum(n)))
+level
+
+ggplot(data=employeeTrends1, aes(x=JobLevel, fill=Attrition))+
+  geom_bar(alpha=0.7)+
+  geom_text(data=level, aes(y=n,label=AttritionRate), position=position_stack(vjust=0.5), size=3)+
+  ggtitle("Attrition by Job Level")+
+  scale_x_discrete(name="Job Level")+
+  scale_y_continuous(name="# of employees")+
+  theme(plot.title=element_text(size=20, color="Black"))+
+  scale_fill_manual(values=c("Blue", "Red"))
+
+#Attrition based on monthly income and job level
+
+ggplot(employeeTrends, aes(JobLevel, MonthlyIncome, color=Attrition))+
+  geom_point(alpha=0.7) +
+  ggtitle("Monthly Income vs. Job Level vs. Attrition") +
+  scale_x_continuous(name="Job Level") +
+  scale_y_continuous((name="Monthly Income")) +
+  theme(plot.title=element_text(size=20, color="Black"))+
+  scale_color_manual(values=c("Blue", "Red"))
+
+```
+
+####In the data set, there are 140 employees that left their employer, signified as 'yes', while 730 remained with their employer, signified as 'no'.
+
+##Based on the comparison of the attrition versus retention of employees in respect to monthly rate, visually, there doesn't appear to be a significant difference. Therefore, for the rest of the study, we will focus on monthly income given the larger variance.
+
+#Analzying the 'Attrition by Monthly Income' box plot, we can see monthly income is, in fact, a determiner for whether an employee stays or leaves. Specifically, an employee with a lower income signals a higher attrition rate, while those making a higher monthly income, have a higher propensity to stay.
+
+#As expected, those in leadership positions i.e. management/director roles, had more experience, therefore were older in age and had higher job levels. As such, we can infer there is a correlation between job level, monthly income, job role, and age, respective to attrition. We can see there are fewer individuals with a job level 5 and corresponding 20,000 monthly income.
+
+#In summary, those in entry level positions, like sales representatives, human resources, and lab technicians, are generally in a lower job level (1, 2, and 3), younger, and therefore make a lower income- this category of employees tends to have higher attrition than employees with a higher job level (4 and 5) who tend to stay at their companies.
+
+##In this next subset of plots, we will explore factors that tend to affect quality of life, and hypothetically may indicate turnover propensity.
+
+```{r}
+
+#Relationship between attrition and overtime
+
+overtime <- employeeTrends1%>%
+  group_by(OverTime)%>%
+  count(Attrition)%>%
+  mutate(AttritionRate=scales::percent(n/sum(n)))
+overtime
+
+ggplot(data=employeeTrends1, aes(x=OverTime, fill=Attrition))+
+  geom_bar(alpha=0.7)+
+  geom_text(data=overtime, aes(y=n,label=AttritionRate), position=position_stack(vjust=0.5), size=3)+
+  ggtitle("Attrition by Overtime")+
+  scale_x_discrete(name="Overtime")+
+  scale_y_continuous(name="# of Employees")+
+  theme(plot.title=element_text(size=20, color="Black"))+
+  scale_fill_manual(values=c("Blue", "Red"))
+  
+#Relationship between monthly income, work life balance, and attrition
+
+ggplot(employeeTrends,aes(WorkLifeBalance, MonthlyIncome, color=Attrition))+
+  geom_point(alpha=0.7)+
+  ggtitle("Attrition respective to Monthly Income and Work Life Balance") +
+  scale_x_continuous(name="Work Life Balance") +
+  scale_y_continuous((name="Monthly Income")) +
+  theme(plot.title=element_text(size=20, color="Black"))+
+  scale_color_manual(values=c("Blue","Red"))
+
+```
+
+#### As hypothesized, those who tend to work overtime result in higher turnover, likely due to dissatisfaction or even 'burnout'. Those who do not work overtime likely have better work life balances, thereby minimizing turnover. Moreover, we see, with certainty, those that make lower incomes tend to have disproportionate work life balances.
+
+##In this section, we explore attrition respective to workplace distance and travel
+
+```{r}
+
+#Relationship between attrition and commutes, both in terms of distance between workplace and home, as well as travel demands of the job
+
+#Attrition based on distance from home
+
+ggplot(data=employeeTrends1)+
+  geom_boxplot(aes(x=Attrition, y=DistanceFromHome, fill=Attrition), alpha=0.7)+
+  ggtitle("Attrition by Distance From Home")+
+  scale_y_continuous(name="Distance From Home")+
+  theme(plot.title=element_text(size=20, color="Black"))+
+  scale_fill_manual(values=c("Blue", "Red"))
+
+# Attrition based on Travel Frequency
+
+travelFrequency <- employeeTrends1%>%
+  group_by(Travel_Frequency)%>%
+  count(Attrition)%>%
+  mutate(AttritionRate=scales::percent(n/sum(n)))
+travelFrequency
+
+travelFrequency1 <- travelFrequency %>% filter(Attrition=="Yes")%>% arrange(desc(AttritionRate))
+
+travelFrequency %>% ungroup() %>%
+  mutate(Travel_Frequency=factor(Travel_Frequency,levels=travelFrequency1$Travel_Frequency, ordered=TRUE)) %>%
+ggplot(aes(x=Travel_Frequency, y=n,fill=Attrition))+
+  geom_col(alpha=0.7)+
+  geom_text(data=travelFrequency, aes(y=n,label=AttritionRate), position=position_stack(vjust=0.5), size=3)+
+  ggtitle("Attrition by Travel Frequency")+
+  scale_x_discrete (name="Travel Frequency")+
+  scale_y_continuous(name="# of Employees")+
+  theme(plot.title=element_text(size=20, color="Black"))+
+  scale_fill_manual(values=c("Blue", "Red"))
+
+```
+####Evidence shows that travel, both, in terms of driving to the office as well as air travel, a further distance from work and/or higher frequency of travel, results in higher attrition, versus those that either live closer to their office or travel less frequently or not at all.
+
+##Now, we analyze other compensatory attributes, related to attrition.
+
+```{r}
+
+#Relationship between attrition, and other compensation and benefit Variables, including stock options and percent salary hikes
+
+stock <- employeeTrends1%>%
+  group_by(StockOptionLevel)%>%
+  count(Attrition)%>%
+  mutate(AttritionRate=scales::percent(n/sum(n)))
+stock
+
+ggplot(data=employeeTrends1, aes(x=StockOptionLevel, fill=Attrition))+
+  geom_bar(alpha=0.7)+
+  geom_text(data=stock, aes(y=n,label=AttritionRate), position=position_stack(vjust=0.5), size=3)+
+  ggtitle("Attrition by Stock Option Level")+
+  scale_x_discrete(name="Stock Option Level")+
+  scale_y_continuous(name="# of employees")+
+  theme(plot.title=element_text(size=20, color="Black"))+
+  scale_fill_manual(values=c("Blue", "Red"))
+
+#Plot showing relationships between employees leaving the company with respect to monthly income, percent salary hike and job level
+
+ggplot(employeeTrends1, aes(x=PercentSalaryHike, y=MonthlyIncome)) + 
+  geom_point(shape=1, alpha=0.7)+ 
+  ggtitle("Attrition respective to Job Level, Percent Salary Hike, and Monthly Income")+
+  scale_x_continuous(name='Percent Salary Hike')+
+  scale_y_continuous((name='Monthly Income'))+
+  theme(plot.title=element_text(size=20, color='Black'))+
+  facet_grid(Attrition ~ JobLevel, labeller = label_both)
+
+#Relationship between attrition and Years with current manager
+
+ggplot(data=employeeTrends1)+
+  geom_boxplot(aes(x=Attrition, y=YearsWithCurrManager, fill= Attrition), alpha=0.7)+
+  ggtitle("Attrition by Years With Current Manager")+
+  scale_y_continuous(name="Years with CUrrent Manager")+
+  theme(plot.title=element_text(size=20, color="Black"))+
+  scale_fill_manual(values=c("Blue", "Red"))
+
+```
+
+#####Stock levels, like monthly income, presumably would be an indicator of an employee's likelihood to stay or leave an organization, and as depicted through the data, this is proven to be true. Those with higher stock option levels are likely more engaged in their organization and therefore stay longer, while those that do not are likely less engaged resulting in turnover.
+
+#Analyzing the relationship between attrition and years with current manager, I glean back on a Gallup poll conducted of more than 1 million employed U.S. workers, which concluded that the No.1 reason people quit their jobs is a bad boss. Through the data visualization, we see the poll holds merit, as one can infer if an individual is staying longer with their current manager, they have a positive working relationship, versus those with less years with their current manager, likely left due to incompatibility or a general lack of affinity towards their manager at that employer.
+
+##In this final stage of the exploratory data analysis, we evaluate the less intuitive attributes related to attrition, to deteremine if there's any unexpected observations.
+
+```{r}
+
+library(grid)
+
+#Analyzing for multi-collinearity between provided variables
+
+employee <- which(sapply(employeeTrends1,is.numeric))
+corrplot(cor(employeeTrends1[employee]),type = "upper", method="number", tl.col = "black", tl.cex=.7, cl.cex = .7, number.cex = 0.7)
+
+#Amalgamating multiple plots into one pane to visualize and analyze attrition compared to a number of different variables
+
+e0 <- ggplot(employeeTrends1,aes(x = PercentSalaryHike,fill = Attrition)) + 
+  geom_bar(position = "fill", alpha=0.7) +
+  scale_x_continuous(name="Percent Salary Hike")+
+  scale_y_discrete(name="# of Employees")+
+  scale_fill_manual(values=c("Blue", "Red"))
+
+e1 <- ggplot(employeeTrends1,aes(x = TotalWorkingYears,fill = Attrition)) + 
+  scale_x_continuous(name="Total Working Years")+
+  scale_y_discrete(name="# of Employees")+
+  geom_bar(position = "fill", alpha=0.7) +
+  scale_fill_manual(values=c("Blue", "Red"))
+
+e2 <- ggplot(employeeTrends1,aes(x = TrainingTimesLastYear,fill = Attrition)) + 
+  geom_bar(position = "fill", alpha=0.7) +
+  scale_x_discrete(name="Training Times Last Year")+
+  scale_y_discrete(name="# of Employees")+
+  scale_fill_manual(values=c("Blue", "Red"))
+
+e3 <- ggplot(employeeTrends1,aes(x = YearsAtCompany,fill = Attrition)) + 
+  geom_bar(position = "fill", alpha=0.7) +
+  scale_x_continuous(name="Years at Company")+
+  scale_y_discrete(name="# of Employees")+
+  scale_fill_manual(values=c("Blue", "Red"))
+
+e4 <- ggplot(employeeTrends1,aes(x = YearsInCurrentRole,fill = Attrition)) + 
+  geom_bar(position = "fill", alpha=0.7) +
+  scale_x_continuous(name="Years in Current Role")+
+  scale_y_discrete(name="# of Employees")+
+  scale_fill_manual(values=c("Blue", "Red"))
+
+e5 <- ggplot(employeeTrends1,aes(x = YearsSinceLastPromotion,fill = Attrition)) + 
+  geom_bar(position = "fill", alpha=0.7) +
+  scale_x_continuous(name="Years Since Last Promotion")+
+  scale_y_discrete(name="# of Employees")+
+  scale_fill_manual(values=c("Blue", "Red"))
+
+e6 <- ggplot(employeeTrends1,aes(x = YearsWithCurrManager,fill = Attrition)) + 
+  geom_bar(position = "fill", alpha=0.7) +
+  scale_x_continuous(name="Years with Current Manager")+
+  scale_y_discrete(name="# of Employees")+
+  scale_fill_manual(values=c("Blue", "Red"))
+
+e7 <- ggplot(employeeTrends1,aes(x = DistanceFromHome,fill = Attrition)) + 
+  geom_bar(position = "fill", alpha=0.7) +
+  scale_x_continuous(name="Distance from Home")+
+  scale_y_discrete(name="# of Employees")+
+  scale_fill_manual(values=c("Blue", "Red"))
+
+e8 <- ggplot()
+
+grid.arrange(e0,e1,e2,e3,e4,e5,e6,e7,ncol=2, top=textGrob("Attrition compared across 8 Variables"))
+
+#Taking another subset of variables to compare against attrition and finalize exploratory analysis portion of study
+
+emp0 <- ggplot(employeeTrends1,aes(x = Travel_Frequency,..count..)) + 
+  geom_bar(aes(fill = Attrition), alpha=0.7,position = "fill") +
+  scale_x_discrete(name="Travel Frequency")+
+  scale_y_discrete(name="# of Employees")+
+  scale_fill_manual(values=c("Blue", "Red"))
+
+emp1 <- ggplot(employeeTrends1,aes(x = Department,..count..)) + 
+  geom_bar(aes(fill = Attrition), alpha=0.7, position = "fill") + 
+  scale_x_discrete(name="Department")+
+  scale_y_discrete(name="# of Employees")+
+  scale_fill_manual(values=c("Blue","Red"))
+
+emp2 <- ggplot(employeeTrends1,aes(x = EducationField,..count..)) + 
+  geom_bar(aes(fill = Attrition), alpha=0.7, position = "fill") + 
+  scale_x_discrete(name="Education Field")+
+  scale_y_discrete(name="Employee #")+
+  scale_fill_manual(values=c("Blue","Red"))
+
+emp3 <- ggplot(employeeTrends1,aes(x = JobRole,..count..)) + 
+  geom_bar(aes(fill = Attrition),alpha=0.7, position = "fill") +
+  scale_x_discrete(name="Job Role")+
+  scale_y_discrete(name="# of Employees")+
+  theme(axis.text.x = element_text(size  = 10, angle = 45,hjust = 1,vjust = 1))+
+  scale_fill_manual(values=c("Blue","Red"))
+
+emp4 <- ggplot(employeeTrends1,aes(x = MaritalStatus,..count..)) + 
+  geom_bar(aes(fill = Attrition),alpha=0.7, position = "fill")+
+  scale_x_discrete(name="Marital Status")+
+  scale_y_discrete(name="# of Employees")+
+  scale_fill_manual(values=c("Blue", "Red"))
+
+emp5 <- ggplot(employeeTrends1,aes(x = OverTime,..count..)) + 
+  geom_bar(aes(fill = Attrition),alpha=0.7, position = "fill")+
+  scale_x_discrete(name="Over Time")+
+  scale_y_discrete(name="# of Employees")+
+  scale_fill_manual(values=c("Blue", "Red"))
+
+emp6 <- ggplot(employeeTrends1,aes(x = JobInvolvement,..count..)) + 
+  geom_bar(aes(fill = Attrition),alpha=0.7, position = "fill")+
+  scale_x_discrete(name="Job Involvement")+
+  scale_y_discrete(name="# of Employees")+
+  scale_fill_manual(values=c("Blue", "Red"))
+
+emp7 <- ggplot(employeeTrends1,aes(x = JobLevel,..count..)) + 
+  geom_bar(aes(fill = Attrition),alpha=0.7, position = "fill")+
+  scale_x_discrete(name="Job Level")+
+  scale_y_discrete(name="# of Employees")+
+  scale_fill_manual(values=c("Blue", "Red"))
+
+emp8 <- ggplot(employeeTrends1,aes(x = JobSatisfaction,..count..)) + 
+  geom_bar(aes(fill = Attrition),alpha=0.7, position = "fill")+
+  scale_x_discrete(name="Job Satisfaction")+
+  scale_y_discrete(name="# of Employees")+
+  scale_fill_manual(values=c("Blue", "Red"))
+
+emp9 <- ggplot()
+
+grid.arrange(emp0,emp1, emp2, emp3, emp4, emp5,emp6, emp7, emp8, ncol =2, top=textGrob("Attrition compared across 8 add'l Variables"))
+
+```
+
+####Comparing the variables with potential to lead to attrition, based off the visualizations, variables including education, performance ratings, training times last year, department, and gender have marginal bearing on attrition.
+
+#The multi-colinearity plot illustrates there is a positive correlation between monthly income and total working years, which corroborates our earlier findings. And, it also shows a negative correlation between an employee's number of companies worked relative to the years with current manager.
+
+##In this next section, applying varying models, we will assess and specify attrition predictors
+
+```{r}
+set.seed(1)
+
+#Creating Train/Test data split of 70/30 which we'll use for our ML models
+
+trainIndices <-createDataPartition(y=employeeTrends1$Attrition, p=0.70, list=FALSE)
+train0 <- employeeTrends1[trainIndices,]
+test0<- employeeTrends1 [-trainIndices,]
+
+train0$Attrition <- factor(as.character(train0$Attrition), levels=c("Yes", "No"))
+test0$Attrition <- factor(as.character(test0$Attrition), levels=c("Yes", "No"))
+
+#Checking distribution in original data and partitioned data
+
+prop.table(table(train0$Attrition))*100
+prop.table(table(test0$Attrition))*100
+prop.table(table(employeeTrends1$Attrition))*100
+
+##Standardize values of input variable
+
+train1 <- train[,names(train)!="Attrition"]
+
+trainPV <- preProcess(x=train1, method= c("center", "scale"))
+trainPV
+
+#training and test control
+set.seed(300)
+trainC <- trainControl(method="repeatedcv", repeats=3)
+kFit <- train(Attrition ~ ., data=train0, method= "knn", trControl= trainC, preProcess= c("center", "scale"), tuneLength=20)
+
+#Output of kNN fit
+kFit
+
+#Plotting yields number of neighbors v accuracy (based on repeated cross validation)
+
+plot(kFit, type = "l", main= "KNN Classification of Attrition", xlab= "k Value", ylab= "Mean Accuracy through Cross Validation")
+
+knnPredict <- predict(kFit, newdata= test0)
+
+#Confusion matrix to see accuracy value and other parameter values
+
+confusionMatrix(knnPredict, test0$Attrition)
+
+#Removed monthly rate based off our earlier findings in the exploratory data analysis, specifically that attrition levels were ostensibly the same regardless of Monthly Rate
+
+#Random forest of train/test data from employeeTrends1
+
+employeeAttritionRF <-randomForest(Attrition ~ .-MonthlyRate, data=train0, strata=train0$Attrition, sampsize= c(20,20))
+
+rfPredict<- predict(employeeAttritionRF, newdata= test0)
+
+confusionMatrix(rfPredict, test0$Attrition)
+
+##Trying again with different parameters
+
+employeeAttritionRF0 <-randomForest(Attrition ~ .-MonthlyRate, data=train0, strata=train0$Attrition, sampsize= c(60,60))
+
+rfPredict0<- predict(employeeAttritionRF0, newdata= test0)
+
+confusionMatrix(rfPredict0, test0$Attrition)
+
+varImp(employeeAttritionRF0)
+
+varImpPlot(employeeAttritionRF0)
+
+##Random forest to classify attrition on the classification set
+
+#Making copy
+employeeTrends2=employeeTrends1
+employeeTrends2$Attrition<-as.factor(employeeTrends2$Attrition)
+
+employeeAttritionRF1 <-randomForest(Attrition ~ .-MonthlyRate, data=employeeTrends2, strata=employeeTrends2$Attrition, sampsize= c(60,60))
+
+rfPredict1<- predict(employeeAttritionRF1, newdata= employeeTrendsClassificationSet1)
+rfPredict1
+
+Case2PredictionsAlidraAttrition <- data.frame(employeeTrendsClassificationSet1$ID, rfPredict1)
+write.csv(Case2PredictionsAlidraAttrition, "/Users/adalidra/Desktop/Data Science Program/DS6306/MSDS_6306_Doing-Data-Science/Unit 14 and 15 Case Study 2/Case2PredictionsAlidraAttrition.csv")
+```
+
+##Predicting salary comparing multiple machine learning models, including linear regression versus random forest
+```{r}
+
+#Random Forest for Predicting Salary
+employeeSalaryRF <-randomForest(MonthlyIncome ~ .-MonthlyRate, data=train0)
+
+rfPredictSalary<- predict(employeeSalaryRF, newdata= test0)
+rfPredictSalary
+
+#RMSE of Random Forest model for predicting salary
+
+RMSE(test0$MonthlyIncome, rfPredictSalary)
+plot(test0$MonthlyIncome, rfPredictSalary, type = "p", main= "Random Forest RMSE for Predicting Salary", xlab= "Monthly Income", ylab= "Monthly Income Prediction")
+
+#Linear regression model
+
+employeeSalaryLM <-lm(MonthlyIncome ~ .-MonthlyRate, data=train0)
+lmPredictSalary<- predict(employeeSalaryLM, newdata= test0)
+lmPredictSalary
+
+RMSE(test0$MonthlyIncome, lmPredictSalary)
+plot(test0$MonthlyIncome, lmPredictSalary, type = "p", main= "Linear Regression Model for Predicting Salary", xlab= "Monthly Income", ylab= "Monthly Income Prediction")
+summary(employeeSalaryLM)
+
+#Paring down linear regression model using only top predictors
+
+employeeSalaryLM <-lm(MonthlyIncome ~ StockOptionLevel + Age + TotalWorkingYears + YearsAtCompany + OverTime, data=train0)
+lmPredictSalary<- predict(employeeSalaryLM, newdata= test0)
+lmPredictSalary
+summary(employeeSalaryLM)
+
+#Refactoring
+
+employeeTrendsRMSE1=employeeTrendsRMSE
+employeeTrendsRMSE1$Attrition<-as.factor(employeeTrendsRMSE1$Attrition)
+employeeTrends1$Attrition <- as.factor(employeeTrends1$Attrition)
+employeeTrendsRMSE1[, "ID"] <- NULL
+
+#Train on employeeTrends2
+
+employeeSalaryRF1 <- randomForest(MonthlyIncome ~ .-MonthlyRate, data=employeeTrends2)
+
+#Test on provided salary data set
+
+rfPredictSalary1<- predict(employeeSalaryRF1, newdata= employeeTrendsRMSE1)
+rfPredictSalary1
+summary(rfPredictSalary1)
+
+Case2PredictionsAlidraSalary <- data.frame(employeeTrendsRMSE$ID, rfPredictSalary1)
+write.csv(Case2PredictionsAlidraSalary, "/Users/adalidra/Desktop/Data Science Program/DS6306/MSDS_6306_Doing-Data-Science/Unit 14 and 15 Case Study 2/CasePredictionsAlidraSalary.csv")
+
+```
+####In this section, we first, applied the K-Nearest neighbor machine learning model, to classify propensity for attrition based on all other employee variables provided, after cleaning the data. While the mean accuracy was 84.29% we took that result with a grain of salt, recognizing there was a disproportionate number of employees that stayed on with their employer over those that left. This was proven when using the confusion matrix and observing a dramatically low sensitivity score of those that left the organization. So we applied a random forest model, using a couple different parameters- while the mean accuracy was slightly lower, the results provided a more accurate representation of the classification of attrition, both those likely to leave versus those that wouldn't.
+
+####Then, we predicted monthly income levels of employees, both using random forest and linear regression models. In the random forest model, we observed a generally normal distribution as depicted in the plot and a root mean square error of $1240.67. Running the same data using the linear regression model, we noticed a slight improvement, which was further amplified once we pared down the number of attributes focusing strictly on the top predictors, as identified through the random forest classification model.
+
+```{r}
+##Youtube Video Link:
+
+## https://youtu.be/xtw9GubvpIc
+```
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
